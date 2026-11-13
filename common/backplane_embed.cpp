@@ -24,6 +24,7 @@
 #include <cctype>
 #include <chrono>
 #include <cstdio>
+#include <fmt/format.h>
 
 #include <wx/app.h>
 #include <wx/dialog.h>
@@ -1284,7 +1285,7 @@ std::string fileSignature( const wxString& aPath )
     if( ec )
         return std::string();
 
-    return std::to_string( time.time_since_epoch().count() ) + ":" + std::to_string( size );
+    return fmt::format( "{}:{}", time.time_since_epoch().count(), size );
 }
 
 
