@@ -71,6 +71,11 @@ with tempfile.TemporaryDirectory(prefix='backplane-dylib-test-') as directory:
         (app / 'Contents/Info.plist').write_bytes(plistlib.dumps({
             'CFBundleIdentifier': identifier, 'CFBundleExecutable': 'probe',
             'CFBundlePackageType': 'APPL', 'CFBundleVersion': '1'}))
+    peer = macos / 'unsigned-cli'
+    shutil.copy2(probe, peer)
+    subprocess.run(['codesign', '--remove-signature', str(peer)], check=True)
+    relocate.sign_bundle(bundle, [probe, peer, executable, frameworks / target.name])
+    print('PASS a primary executable listed first waits for its unsigned CLI peer')
     subprocess.run([sys.executable, str(Path(__file__).with_name('backplane-macos-relocate.py')), str(bundle), '--arch', arch], check=True)
     subprocess.run(['codesign', '--verify', '--deep', '--strict', str(bundle)], check=True)
     print('PASS nested application and outer resource seals validate after relocation')
