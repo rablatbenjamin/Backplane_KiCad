@@ -39,6 +39,19 @@ def external_dependency(name):
     return name.startswith('/') and not name.startswith(('/usr/lib/', '/System/Library/'))
 
 
+def sign_bundle(bundle, binaries):
+    # Signing an executable inside a bundle can seal its resources too. Finish
+    # all Mach-O changes first, then seal nested bundles before their parents.
+    for binary in sorted(binaries, key=lambda p: len(p.parts), reverse=True):
+        subprocess.run(['codesign', '--force', '--sign', '-', str(binary)], check=True)
+    nested = [p for p in bundle.rglob('*') if p.is_dir() and not p.is_symlink()
+              and p.suffix.lower() in ('.app', '.appex', '.framework', '.xpc')]
+    for child in sorted(nested, key=lambda p: len(p.parts), reverse=True):
+        subprocess.run(['codesign', '--force', '--sign', '-', str(child)], check=True)
+    subprocess.run(['codesign', '--force', '--sign', '-', str(bundle)], check=True)
+    subprocess.run(['codesign', '--verify', '--deep', '--strict', str(bundle)], check=True)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('bundle', type=Path)
@@ -74,9 +87,7 @@ def main():
             subprocess.run(['install_name_tool', '-change', dep, '@loader_path/' + relative, str(binary)], check=True)
         if binary.parent == frameworks and binary.suffix == '.dylib':
             subprocess.run(['install_name_tool', '-id', '@rpath/' + binary.name, str(binary)], check=True)
-    # Sign after every Mach-O modification, inside out; no signing identity needed.
-    for binary in sorted(done, key=lambda p: len(p.parts), reverse=True):
-        subprocess.run(['codesign', '--force', '--sign', '-', str(binary)], check=True)
+    sign_bundle(bundle, done)
     for binary in done:
         for line in output('otool', '-L', str(binary)).splitlines()[1:]:
             dep = line.strip().split(' (compatibility version', 1)[0]
