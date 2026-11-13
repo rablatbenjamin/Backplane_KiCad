@@ -3,7 +3,7 @@ on:
   push:
     # every batch on the release line and ci/** (a macOS break fails the batch like Linux and
     # Windows), and every release tag (the integrator attaches the package from this run)
-    branches: ['release/bp.13', 'ci/**']
+    branches: ['release/bp.13', 'ci/**', 'impl/macos-intel-bp13']
     tags: ['backplane-kicad-v*']
   workflow_dispatch:
 permissions:
@@ -13,8 +13,14 @@ concurrency:
   cancel-in-progress: false
 jobs:
   macos:
-    name: Native Apple silicon runtime, relocation and IPC
-    runs-on: macos-15
+    name: Native ${{ matrix.arch }} runtime, relocation and IPC
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15, arch: arm64 }
+          - { os: macos-15-intel, arch: x86_64 }
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 300
     env:
       CCACHE_DIR: ${{ github.workspace }}/.backplane-ccache
@@ -22,6 +28,7 @@ jobs:
       # reusing objects; the size cap keeps main's one rolling entry (and its artifact) small.
       CCACHE_COMPILERCHECK: content
       CCACHE_MAXSIZE: 500M
+      BACKPLANE_MACOS_ARCH: ${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -41,6 +48,7 @@ jobs:
           git clone --quiet https://github.com/nanomsg/nng.git "$RUNNER_TEMP/nng-src"
           git -C "$RUNNER_TEMP/nng-src" checkout --quiet 73f715235967afc783e0b99c52d015dc10897fda
           cmake -S "$RUNNER_TEMP/nng-src" -B "$RUNNER_TEMP/nng-build" -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="$BACKPLANE_MACOS_ARCH" \
             -DBUILD_SHARED_LIBS=ON -DNNG_TESTS=OFF -DNNG_TOOLS=OFF -DNNG_ENABLE_NNGCAT=OFF \
             -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/nng" -DCMAKE_INSTALL_NAME_DIR="$RUNNER_TEMP/nng/lib"
           cmake --build "$RUNNER_TEMP/nng-build"
@@ -73,7 +81,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: macos-kicad-compiled-stage-${{ github.sha }}
+          name: macos-kicad-compiled-stage-${{ matrix.arch }}-${{ github.sha }}
           retention-days: 7
           compression-level: 0
           path: ${{ runner.temp }}/backplane-macos-stage.tar.gz
@@ -101,7 +109,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: macos-kicad-diagnostics
+          name: macos-kicad-diagnostics-${{ matrix.arch }}
           retention-days: 7
           path: |
             build/backplane-macos/CMakeCache.txt
@@ -111,7 +119,7 @@ jobs:
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
-          name: backplane-kicad-macos-native
+          name: backplane-kicad-macos-native-${{ matrix.arch }}
           retention-days: 7
           compression-level: 0
           path: |
@@ -128,12 +136,12 @@ jobs:
         run: |
           python -m pip install pyobjc-framework-Quartz pillow
           export PATH="$(brew --prefix protobuf@29)/bin:$PATH"
-          root=$(ls -d release/macos/backplane-kicad-darwin-arm64-*/ | head -1)
+          root=$(ls -d release/macos/backplane-kicad-darwin-${{ matrix.arch }}-*/ | head -1)
           python scripts/backplane-embed-macos-check.py "${root}bin/kicad" "${root}bin/kicad-cli" --out "$RUNNER_TEMP/embed-macos"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: embed-macos-check
+          name: embed-macos-check-${{ matrix.arch }}
           retention-days: 7
           path: ${{ runner.temp }}/embed-macos
           if-no-files-found: ignore

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Native regression for already-installed dylibs and real basename collisions."""
 import importlib.util
+import platform
 from pathlib import Path
 import shutil
 import subprocess
@@ -31,6 +32,16 @@ with tempfile.TemporaryDirectory(prefix='backplane-dylib-test-') as directory:
     assert source.read_bytes() != target.read_bytes(), 'fixture must reproduce CMake relocation/signing'
     relocate.require_same_library(source, target)
     print('PASS already-relocated and signed library retains native identity')
+    arch = platform.machine()
+    relocate.require_architecture(target, arch)
+    other_arch = 'arm64' if arch == 'x86_64' else 'x86_64'
+    try:
+        relocate.require_architecture(target, other_arch)
+    except RuntimeError as error:
+        assert f'expected {other_arch}' in str(error)
+    else:
+        raise AssertionError('a dependency missing the runtime architecture was accepted')
+    print('PASS native architecture accepted and incompatible architecture rejected')
     try:
         relocate.require_same_library(different, target)
     except RuntimeError as error:
@@ -50,7 +61,7 @@ with tempfile.TemporaryDirectory(prefix='backplane-dylib-test-') as directory:
     code.write_text('int test_marker(void); int main(void) { return test_marker() == 1 ? 0 : 1; }\n')
     probe = macos / 'probe'
     subprocess.run(['clang', '-Wl,-headerpad_max_install_names', str(code), str(source), '-o', str(probe)], check=True)
-    subprocess.run([sys.executable, str(Path(__file__).with_name('backplane-macos-relocate.py')), str(bundle)], check=True)
+    subprocess.run([sys.executable, str(Path(__file__).with_name('backplane-macos-relocate.py')), str(bundle), '--arch', arch], check=True)
     source.parent.rename(root / 'removed-source')
     subprocess.run([str(probe)], check=True)
     print('PASS relocated executable runs after its original build libraries disappear')
