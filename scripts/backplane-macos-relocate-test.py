@@ -2,6 +2,7 @@
 """Native regression for already-installed dylibs and real basename collisions."""
 import importlib.util
 import platform
+import plistlib
 from pathlib import Path
 import shutil
 import subprocess
@@ -61,7 +62,18 @@ with tempfile.TemporaryDirectory(prefix='backplane-dylib-test-') as directory:
     code.write_text('int test_marker(void); int main(void) { return test_marker() == 1 ? 0 : 1; }\n')
     probe = macos / 'probe'
     subprocess.run(['clang', '-Wl,-headerpad_max_install_names', str(code), str(source), '-o', str(probe)], check=True)
+    for app, identifier in [(bundle, 'works.backplane.relocation-test'),
+                            (bundle / 'Contents/Applications/Nested.app', 'works.backplane.relocation-nested')]:
+        executable = app / 'Contents/MacOS/probe'
+        executable.parent.mkdir(parents=True, exist_ok=True)
+        if executable != probe:
+            shutil.copy2(probe, executable)
+        (app / 'Contents/Info.plist').write_bytes(plistlib.dumps({
+            'CFBundleIdentifier': identifier, 'CFBundleExecutable': 'probe',
+            'CFBundlePackageType': 'APPL', 'CFBundleVersion': '1'}))
     subprocess.run([sys.executable, str(Path(__file__).with_name('backplane-macos-relocate.py')), str(bundle), '--arch', arch], check=True)
+    subprocess.run(['codesign', '--verify', '--deep', '--strict', str(bundle)], check=True)
+    print('PASS nested application and outer resource seals validate after relocation')
     source.parent.rename(root / 'removed-source')
     subprocess.run([str(probe)], check=True)
     print('PASS relocated executable runs after its original build libraries disappear')

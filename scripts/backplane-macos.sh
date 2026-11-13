@@ -155,6 +155,7 @@ MANIFEST
 python scripts/backplane-ipc-smoke.py "$root/bin/kicad-cli" --expected-version "$version" | tee "$release/ipc.log"
 python scripts/backplane-document-ipc-regression.py "$root/bin/kicad-cli" | tee "$release/documents.log"
 python scripts/backplane-glb-concurrency-test.py "$root/bin/kicad-cli" | tee "$release/glb-concurrency.log"
+codesign --verify --deep --strict "$root/KiCad.app"
 # The licence of every library the app bundles, from the Homebrew keg it was linked from (or, where the keg has none, that formula's
 # source at the bundled version), each under its own folder; LIBRARIES.tsv says where each text came from, BUNDLED.tsv what every
 # Mach-O in the app was built from. The check fails the build if a bundled library ends with no licence file.
