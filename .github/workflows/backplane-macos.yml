@@ -56,6 +56,7 @@ jobs:
       - name: Build, relocate, test and package
         run: |
           python scripts/backplane-macos-relocate-test.py
+          python scripts/backplane-macos-launchers-test.py
           bash scripts/backplane-macos.sh
       - name: Retain compiled bundle when a later packaging gate fails
         if: failure()

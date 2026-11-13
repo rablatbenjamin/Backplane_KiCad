@@ -105,6 +105,11 @@ Each architecture must pass the relocated IPC smoke test, PCB and schematic
 document regression, and concurrent GLB export regression before its archive is
 uploaded. A configured matrix entry alone does not qualify a working runtime.
 
+The runtime's `bin/` includes `kicad-cli`, `kicad`, `pcbnew` and `eeschema`
+launchers. Backplane's Open in KiCad action discovers the GUI programs beside
+the CLI; these launchers select the matching bundled editors and plugin paths
+rather than a separately installed stock KiCad.
+
 Download the `backplane-kicad-macos-native-<architecture>` artifact from a
 successful run and verify its archive against the included `SHA256SUMS`. Extract
 the whole archive and retain its launcher, manifest, API descriptor, dependency
