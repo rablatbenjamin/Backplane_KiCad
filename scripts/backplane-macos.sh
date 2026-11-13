@@ -3,6 +3,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ "$(uname -s)" = Darwin ] || { echo 'macOS is required' >&2; exit 2; }
+arch=$(uname -m)
+case "$arch" in arm64|x86_64) ;; *) echo "Unsupported native macOS architecture: $arch" >&2; exit 2;; esac
+if [ "${BACKPLANE_MACOS_ARCH:-$arch}" != "$arch" ]; then
+  echo "Expected native $BACKPLANE_MACOS_ARCH runner, found $arch" >&2
+  exit 2
+fi
 export HOMEBREW_NO_AUTO_UPDATE=1
 prefix=$(brew --prefix)
 export PATH="$prefix/opt/protobuf@29/bin:$prefix/bin:$PATH"
@@ -25,6 +31,7 @@ mkdir -p "$release"
 ccache --max-size=2G
 cmake -S . -B "$build" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$stage" \
+  -DCMAKE_OSX_ARCHITECTURES="$arch" \
   -DCMAKE_PREFIX_PATH="$nng;$prefix;$prefix/opt/protobuf@29;$prefix/opt/curl;$prefix/opt/opencascade" \
   -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
   -DOCC_INCLUDE_DIR="$(brew --prefix opencascade)/include/opencascade" \
@@ -48,8 +55,8 @@ bundle="$stage/KiCad.app"
 cli=$(find "$build" -type f -name kicad-cli -perm -111 | head -n 1)
 [ -n "$cli" ]
 cp "$cli" "$bundle/Contents/MacOS/kicad-cli"
-python scripts/backplane-macos-relocate.py "$bundle" | tee "$release/relocation.log"
-root="$release/backplane-kicad-darwin-$(uname -m)-$version"
+python scripts/backplane-macos-relocate.py "$bundle" --arch "$arch" | tee "$release/relocation.log"
+root="$release/backplane-kicad-darwin-$arch-$version"
 mkdir -p "$root/bin" "$root/share/backplane" "$root/licenses"
 cp -R "$bundle" "$root/KiCad.app"
 # Backplane's packaged IPC helper loads the runtime's nng from root/lib.
@@ -75,12 +82,12 @@ git archive HEAD | gzip > "$root/licenses/matching-source.tar.gz"
 printf '%s\n' "$(git rev-parse HEAD)" > "$root/SOURCE_COMMIT"
 cp BACKPLANE_UPSTREAM "$root/UPSTREAM_COMMIT"
 # Exercise the relocated package from a different working directory with fresh state.
-export HOME="$RUNNER_TEMP/backplane-kicad-macos-home"
-export XDG_CONFIG_HOME="$HOME/config" XDG_CACHE_HOME="$HOME/cache" KICAD_CONFIG_HOME="$HOME/kicad"
-mkdir -p "$HOME"
+runtime_state="$RUNNER_TEMP/backplane-kicad-macos-$arch-state"
+export XDG_CONFIG_HOME="$runtime_state/config" XDG_CACHE_HOME="$runtime_state/cache" KICAD_CONFIG_HOME="$runtime_state/kicad"
+mkdir -p "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$KICAD_CONFIG_HOME"
 "$root/bin/kicad-cli" --version | tee "$release/version.log"
 "$root/bin/kicad-cli" api-server --describe | tee "$root/share/backplane/runtime.json" "$release/runtime.json"
-python - "$root" "$(uname -m)" <<'MANIFEST'
+python - "$root" "$arch" <<'MANIFEST'
 import json
 from pathlib import Path
 import sys

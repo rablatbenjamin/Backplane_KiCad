@@ -93,6 +93,28 @@ change. The caller can show the report and retry with `--force`; items in the
 (`*.backplane.json` and `*.backplane-assembly.json`) are copied beside the
 export and reported as kept because stock KiCad ignores them.
 
+## Native macOS builds
+
+`.github/workflows/backplane-macos.yml` builds separate `arm64` and `x86_64`
+runtimes on native GitHub-hosted macOS runners. The compiler cache, diagnostics,
+failed-stage bundles and final artifacts are separated by architecture. The
+relocation gate checks that every packaged Mach-O includes the requested
+architecture, including dependencies copied from Homebrew.
+
+Each architecture must pass the relocated IPC smoke test, PCB and schematic
+document regression, and concurrent GLB export regression before its archive is
+uploaded. A configured matrix entry alone does not qualify a working runtime.
+
+Download the `backplane-kicad-macos-native-<architecture>` artifact from a
+successful run and verify its archive against the included `SHA256SUMS`. Extract
+the whole archive and retain its launcher, manifest, API descriptor, dependency
+licenses and matching source. In Backplane, select its `bin/kicad-cli` under
+Settings, CAD. This explicit runtime path also works when the app's managed
+installer has no published package for the machine's architecture.
+
+Full KiCad builds run in CI; the user's Mac only needs to run the relocated
+archive and the integration checks.
+
 ## Relocated runtime hooks
 
 Set `KICAD_KIFACE_HOME` to the directory containing the runtime's `.kiface`

@@ -28,6 +28,12 @@ def require_same_library(source, target):
         raise RuntimeError(f'conflicting dependency basename: {target.name}')
 
 
+def require_architecture(path, arch):
+    architectures = output('lipo', '-archs', str(path)).split()
+    if arch not in architectures:
+        raise RuntimeError(f'{path} has architectures {architectures}, expected {arch}')
+
+
 def external_dependency(name):
     # The copied CLI can still name the build tree, as well as Homebrew.
     return name.startswith('/') and not name.startswith(('/usr/lib/', '/System/Library/'))
@@ -36,7 +42,9 @@ def external_dependency(name):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('bundle', type=Path)
-    bundle = ap.parse_args().bundle.resolve(strict=True)
+    ap.add_argument('--arch', choices=('arm64', 'x86_64'), help='required architecture of every packaged Mach-O')
+    args = ap.parse_args()
+    bundle = args.bundle.resolve(strict=True)
     frameworks = bundle / 'Contents/Frameworks'
     frameworks.mkdir(parents=True, exist_ok=True)
     binaries = [p for p in bundle.rglob('*') if macho(p)]
@@ -46,6 +54,8 @@ def main():
         binary = queue.popleft()
         if binary in done:
             continue
+        if args.arch:
+            require_architecture(binary, args.arch)
         done.add(binary)
         # The first line names the input, the rest are dependency install names.
         for line in output('otool', '-L', str(binary)).splitlines()[1:]:
