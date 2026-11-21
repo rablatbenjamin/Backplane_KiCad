@@ -3,9 +3,15 @@ on:
   push:
     # every batch on the release line and ci/** (a macOS break fails the batch like Linux and
     # Windows), and every release tag (the integrator attaches the package from this run)
-    branches: ['release/bp.13', 'ci/**', 'impl/macos-intel-bp13']
+    branches: ['release/bp.13', 'ci/**']
     tags: ['backplane-kicad-v*']
   workflow_dispatch:
+    inputs:
+      arch:
+        description: Native architectures to build
+        type: choice
+        options: [all, arm64, x86_64]
+        default: all
 permissions:
   contents: read
 concurrency:
@@ -16,10 +22,9 @@ jobs:
     name: Native ${{ matrix.arch }} runtime, relocation and IPC
     strategy:
       fail-fast: false
+      # A push builds both; a manual run may build one (inputs.arch is empty on a push)
       matrix:
-        include:
-          - { os: macos-15, arch: arm64 }
-          - { os: macos-15-intel, arch: x86_64 }
+        include: ${{ fromJSON(inputs.arch == 'arm64' && '[{"os":"macos-15","arch":"arm64"}]' || inputs.arch == 'x86_64' && '[{"os":"macos-15-intel","arch":"x86_64"}]' || '[{"os":"macos-15","arch":"arm64"},{"os":"macos-15-intel","arch":"x86_64"}]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 300
     env:
